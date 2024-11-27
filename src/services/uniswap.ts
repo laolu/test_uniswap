@@ -4,10 +4,11 @@ import { getContract, readContract, writeContract } from '@wagmi/core';
 import { parseUnits } from 'viem';
 import { SEPOLIA_CHAIN_ID } from '@/constants/chains';
 import { ethers } from 'ethers';
+import { Contract } from 'ethers';
 
 // Sepolia 测试网上的合约地址
-export const UNISWAP_V2_ROUTER = '0xa5a9E73eA7a75F54613a465184dE1969b227651C';
-export const UNISWAP_V2_FACTORY = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003';
+export const UNISWAP_V2_ROUTER = '0x004D1a31a9C4c2123cC2598cAe13425d408853aB';
+export const UNISWAP_V2_FACTORY = '0xa5a9E73eA7a75F54613a465184dE1969b227651C';
 
 // Factory ABI
 const FACTORY_ABI = [
@@ -41,21 +42,21 @@ const FACTORY_ABI = [
 export const TOKENS = {
   WETH: new Token(
     SEPOLIA_CHAIN_ID,
-    '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9',  // Sepolia WETH
+    '0x03Ee6A170cE7CDBD3d6D7dB89b7683374f03A78F',  // Sepolia WETH
     18,
     'WETH',
     'Wrapped Ether'
   ),
   USDC: new Token(
     SEPOLIA_CHAIN_ID,
-    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',  // Sepolia USDC
+    '0x22013aFa65EDc2f0E2eD49D1EEA19A663aEC860d',  // Sepolia USDC
     6,
     'USDC',
     'USD Coin'
   ),
   DAI: new Token(
     SEPOLIA_CHAIN_ID,
-    '0x3e622317f8C93f7328350cF0B56d9eD4C620C5d6',  // Sepolia DAI
+    '0xc95FBeCcE5D0B354122D0258b2eB4Cb15604106C',  // Sepolia DAI
     18,
     'DAI',
     'Dai Stablecoin'
@@ -65,11 +66,29 @@ export const TOKENS = {
 // 创建交易对
 export async function createPair(tokenA: Token, tokenB: Token) {
   try {
+    // 确保代币按地址排序
+    const [token0, token1] = tokenA.address < tokenB.address ? [tokenA, tokenB] : [tokenB, tokenA];
+    
+    // 先检查交易对是否已存在
+    const existingPair = await readContract({
+      address: UNISWAP_V2_FACTORY as `0x${string}`,
+      abi: FACTORY_ABI,
+      functionName: 'getPair',
+      args: [token0.address, token1.address],
+    });
+
+    // 如果交易对已存在且不是零地址，则直接返回
+    if (existingPair && existingPair !== '0x0000000000000000000000000000000000000000') {
+      console.log('交易对已存在:', existingPair);
+      return existingPair;
+    }
+
+    console.log('创建新的交易对...');
     const createPairTx = await writeContract({
       address: UNISWAP_V2_FACTORY as `0x${string}`,
       abi: FACTORY_ABI,
       functionName: 'createPair',
-      args: [tokenA.address, tokenB.address],
+      args: [token0.address, token1.address],
     });
 
     return createPairTx;

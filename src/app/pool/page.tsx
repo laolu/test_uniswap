@@ -35,12 +35,6 @@ export default function PoolPage() {
             <p className="text-gray-500 dark:text-gray-400">
               暂无流动性
             </p>
-            <Link
-              href="/pool/add"
-              className="text-blue-600 hover:text-blue-700 mt-2 inline-block"
-            >
-              添加流动性
-            </Link>
           </div>
         )}
       </div>

@@ -28,8 +28,9 @@ export default function AddLiquidityPage() {
     setIsLoading(true);
 
     try {
-      // 先尝试创建交易对
-      await createPair(selectedTokenA, selectedTokenB);
+      // 创建或获取已存在的交易对
+      const pairResult = await createPair(selectedTokenA, selectedTokenB);
+      console.log('交易对地址:', pairResult);
       
       // 添加流动性
       const tx = await addInitialLiquidity(
@@ -43,8 +44,10 @@ export default function AddLiquidityPage() {
       
       // 重定向到池子页面
       router.push('/pool');
-    } catch (error) {
+    } catch (error: any) {
       console.error('添加流动性失败:', error);
+      // 这里可以添加错误提示
+      alert(error.message || '操作失败，请重试');
     } finally {
       setIsLoading(false);
     }
