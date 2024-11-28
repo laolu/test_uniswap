@@ -5,10 +5,11 @@ import { ArrowDownIcon } from '@heroicons/react/24/outline';
 import { useAccount, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenSelector from '@/components/TokenSelector';
-import { TOKENS, addInitialLiquidity, createPair } from '@/services/uniswap';
+import { addInitialLiquidity, createPair } from '@/services/uniswap';
 import { Token } from '@uniswap/sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { DAI, USDC ,USDT,WETH } from '@/constants/tokens';
 
 export default function AddLiquidityPage() {
   const router = useRouter();
@@ -18,8 +19,8 @@ export default function AddLiquidityPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [tokenAAmount, setTokenAAmount] = useState('');
   const [tokenBAmount, setTokenBAmount] = useState('');
-  const [selectedTokenA, setSelectedTokenA] = useState<Token>(TOKENS.DAI);
-  const [selectedTokenB, setSelectedTokenB] = useState<Token>(TOKENS.USDC);
+  const [selectedTokenA, setSelectedTokenA] = useState<Token>(DAI);
+  const [selectedTokenB, setSelectedTokenB] = useState<Token>(USDC);
   const [showTokenSelector, setShowTokenSelector] = useState<'A' | 'B' | null>(null);
   const [priceInfo, setPriceInfo] = useState<any>(null);
 

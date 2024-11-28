@@ -3,7 +3,7 @@ import { SupportedChainId } from './chains';
 
 export const WETH = new Token(
   SupportedChainId.SEPOLIA,
-  '0x03Ee6A170cE7CDBD3d6D7dB89b7683374f03A78F',
+  '0x86268F605DA130ea51E51cbD90215cE4f6e2A4C4',
   18,
   'WETH',
   'Wrapped Ether'
@@ -11,18 +11,26 @@ export const WETH = new Token(
 
 export const USDC = new Token(
   SupportedChainId.SEPOLIA,
-  '0x22013aFa65EDc2f0E2eD49D1EEA19A663aEC860d',
-  6,
+  '0x9Bd1AF68Abbc63195aeEA1260d1F294e7e03E511',
+  18,
   'USDC',
   'USD Coin'
 );
 
 export const DAI = new Token(
   SupportedChainId.SEPOLIA,
-  '0xc95FBeCcE5D0B354122D0258b2eB4Cb15604106C',
+  '0x6607b0CE0Ef51520b50B37FC1B732534CE8d24a4',
   18,
   'DAI',
-  'Dai Stablecoin'
+  'My Dai'
 );
 
-export const COMMON_TOKENS = [WETH, USDC, DAI]; 
+export const USDT = new Token(
+  SupportedChainId.SEPOLIA,
+  '0x9d6C5b366BF6ea47523b34dc0A98056893f29876',
+  18,
+  'USDT',
+  'My USDT'
+);
+
+export const COMMON_TOKENS = [WETH, USDC, DAI,USDT]; 
