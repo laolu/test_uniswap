@@ -1,62 +1,45 @@
 import { Token, WETH, Fetcher, Route, Trade, TokenAmount, TradeType, Percent, ChainId } from '@uniswap/sdk';
-import { UNISWAP_V2_ROUTER_ABI, ERC20_ABI } from '@/constants/abis';
+import { UNISWAP_V2_ROUTER_ABI, ERC20_ABI, UNISWAP_V2_FACTORY_ABI } from '@/constants/abis';
 import { getContract, readContract, writeContract } from '@wagmi/core';
 import { parseUnits } from 'viem';
 import { SEPOLIA_CHAIN_ID } from '@/constants/chains';
 import { ethers } from 'ethers';
-import { Contract } from 'ethers';
 
 // Sepolia 测试网上的合约地址
 export const UNISWAP_V2_ROUTER = '0x004D1a31a9C4c2123cC2598cAe13425d408853aB';
 export const UNISWAP_V2_FACTORY = '0xa5a9E73eA7a75F54613a465184dE1969b227651C';
 
-// Factory ABI
-const FACTORY_ABI = [
-  {
-    constant: true,
-    inputs: [
-      { name: 'tokenA', type: 'address' },
-      { name: 'tokenB', type: 'address' }
-    ],
-    name: 'getPair',
-    outputs: [{ name: 'pair', type: 'address' }],
-    payable: false,
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: 'tokenA', type: 'address' },
-      { name: 'tokenB', type: 'address' }
-    ],
-    name: 'createPair',
-    outputs: [{ name: 'pair', type: 'address' }],
-    payable: false,
-    stateMutability: 'nonpayable',
-    type: 'function'
+// 在文件顶部添加 Sepolia ChainId 的声明
+declare module '@uniswap/sdk' {
+  export enum ChainId {
+    MAINNET = 1,
+    ROPSTEN = 3,
+    RINKEBY = 4,
+    GÖRLI = 5,
+    KOVAN = 42,
+    SEPOLIA = 11155111
   }
-];
+}
 
-// 常用代币 (Sepolia)
+// 修改 TOKENS 的声明，使用新的 ChainId.SEPOLIA
 export const TOKENS = {
   WETH: new Token(
-    SEPOLIA_CHAIN_ID,
-    '0x03Ee6A170cE7CDBD3d6D7dB89b7683374f03A78F',  // Sepolia WETH
+    ChainId.SEPOLIA,  // 使用枚举值
+    '0x03Ee6A170cE7CDBD3d6D7dB89b7683374f03A78F',
     18,
     'WETH',
     'Wrapped Ether'
   ),
   USDC: new Token(
-    SEPOLIA_CHAIN_ID,
-    '0x22013aFa65EDc2f0E2eD49D1EEA19A663aEC860d',  // Sepolia USDC
-    6,
+    ChainId.SEPOLIA,  // 使用枚举值
+    '0x22013aFa65EDc2f0E2eD49D1EEA19A663aEC860d',
+    18,
     'USDC',
     'USD Coin'
   ),
   DAI: new Token(
-    SEPOLIA_CHAIN_ID,
-    '0xc95FBeCcE5D0B354122D0258b2eB4Cb15604106C',  // Sepolia DAI
+    ChainId.SEPOLIA,  // 使用枚举值
+    '0xc95FBeCcE5D0B354122D0258b2eB4Cb15604106C',
     18,
     'DAI',
     'Dai Stablecoin'
@@ -72,7 +55,7 @@ export async function createPair(tokenA: Token, tokenB: Token) {
     // 先检查交易对是否已存在
     const existingPair = await readContract({
       address: UNISWAP_V2_FACTORY as `0x${string}`,
-      abi: FACTORY_ABI,
+      abi: UNISWAP_V2_FACTORY_ABI,
       functionName: 'getPair',
       args: [token0.address, token1.address],
     });
@@ -86,7 +69,7 @@ export async function createPair(tokenA: Token, tokenB: Token) {
     console.log('创建新的交易对...');
     const createPairTx = await writeContract({
       address: UNISWAP_V2_FACTORY as `0x${string}`,
-      abi: FACTORY_ABI,
+      abi: UNISWAP_V2_FACTORY_ABI,
       functionName: 'createPair',
       args: [token0.address, token1.address],
     });
@@ -104,30 +87,117 @@ export async function addInitialLiquidity(
   tokenB: Token,
   amountA: string,
   amountB: string,
-  account: string
+  account: string,
+  slippageTolerance: number = 0.5
 ) {
   try {
+    // 检查代币余额
+    const balanceA = await readContract({
+      address: tokenA.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [account],
+    });
+
+    const balanceB = await readContract({
+      address: tokenB.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [account],
+    });
+
     const amountAWei = parseUnits(amountA, tokenA.decimals);
     const amountBWei = parseUnits(amountB, tokenB.decimals);
 
-    // 批准 tokenA
-    const approveATx = await writeContract({
-      address: tokenA.address as `0x${string}`,
-      abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [UNISWAP_V2_ROUTER, amountAWei],
+    console.log('添加流动性参数:', {
+      tokenA: {
+        address: tokenA.address,
+        decimals: tokenA.decimals,
+        balance: balanceA.toString(),
+        amount: amountAWei.toString()
+      },
+      tokenB: {
+        address: tokenB.address,
+        decimals: tokenB.decimals,
+        balance: balanceB.toString(),
+        amount: amountBWei.toString()
+      }
     });
 
-    // 批准 tokenB
-    const approveBTx = await writeContract({
+    // 检查余额是否足够
+    if (balanceA < amountAWei) {
+      throw new Error(`${tokenA.symbol} 余额不足`);
+    }
+    if (balanceB < amountBWei) {
+      throw new Error(`${tokenB.symbol} 余额不足`);
+    }
+
+    // 检查现有授权额度
+    const allowanceA = await readContract({
+      address: tokenA.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [account, UNISWAP_V2_ROUTER],
+    });
+
+    const allowanceB = await readContract({
       address: tokenB.address as `0x${string}`,
       abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [UNISWAP_V2_ROUTER, amountBWei],
+      functionName: 'allowance',
+      args: [account, UNISWAP_V2_ROUTER],
     });
+
+    console.log('授权情况:', {
+      tokenA: {
+        allowance: allowanceA.toString(),
+        needed: amountAWei.toString()
+      },
+      tokenB: {
+        allowance: allowanceB.toString(),
+        needed: amountBWei.toString()
+      }
+    });
+
+    // 如果授权额度不足，则进行授权
+    if (allowanceA < amountAWei) {
+      console.log(`正在授权 ${tokenA.symbol}...`);
+      const approveATx = await writeContract({
+        address: tokenA.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [UNISWAP_V2_ROUTER, amountAWei],
+      });
+      console.log(`${tokenA.symbol} 授权成功:`, approveATx);
+    }
+
+    if (allowanceB < amountBWei) {
+      console.log(`正在授权 ${tokenB.symbol}...`);
+      const approveBTx = await writeContract({
+        address: tokenB.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [UNISWAP_V2_ROUTER, amountBWei],
+      });
+      console.log(`${tokenB.symbol} 授权成功:`, approveBTx);
+    }
+
+    // 计算最小接受数量（考虑滑点）
+    const amountAMin = BigInt(amountAWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
+    const amountBMin = BigInt(amountBWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
 
     // 添加流动性
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20分钟后过期
+    console.log('添加流动性参数:', {
+      tokenA: tokenA.address,
+      tokenB: tokenB.address,
+      amountADesired: amountAWei.toString(),
+      amountBDesired: amountBWei.toString(),
+      amountAMin: amountAMin.toString(),
+      amountBMin: amountBMin.toString(),
+      to: account,
+      deadline
+    });
+
     const addLiquidityTx = await writeContract({
       address: UNISWAP_V2_ROUTER as `0x${string}`,
       abi: UNISWAP_V2_ROUTER_ABI,
@@ -137,8 +207,8 @@ export async function addInitialLiquidity(
         tokenB.address,
         amountAWei,
         amountBWei,
-        amountAWei,
-        amountBWei,
+        amountAMin,
+        amountBMin,
         account,
         BigInt(deadline),
       ],
@@ -147,7 +217,14 @@ export async function addInitialLiquidity(
     return addLiquidityTx;
   } catch (error) {
     console.error('添加流动性失败:', error);
-    throw error;
+    // 提供更详细的错误信息
+    if (error.message.includes('insufficient')) {
+      throw new Error('代币余额不足');
+    } else if (error.message.includes('EXPIRED')) {
+      throw new Error('交易超时');
+    } else {
+      throw error;
+    }
   }
 }
 

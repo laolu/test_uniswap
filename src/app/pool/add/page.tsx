@@ -18,7 +18,7 @@ export default function AddLiquidityPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [tokenAAmount, setTokenAAmount] = useState('');
   const [tokenBAmount, setTokenBAmount] = useState('');
-  const [selectedTokenA, setSelectedTokenA] = useState<Token>(TOKENS.WETH);
+  const [selectedTokenA, setSelectedTokenA] = useState<Token>(TOKENS.DAI);
   const [selectedTokenB, setSelectedTokenB] = useState<Token>(TOKENS.USDC);
   const [showTokenSelector, setShowTokenSelector] = useState<'A' | 'B' | null>(null);
   const [priceInfo, setPriceInfo] = useState<any>(null);
