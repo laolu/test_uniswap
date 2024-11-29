@@ -182,8 +182,8 @@ export async function addInitialLiquidity(
     }
 
     // 计算最小接受数量（考虑滑点）
-    const amountAMin = BigInt(amountAWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
-    const amountBMin = BigInt(amountBWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
+    const amountAMin = 0;//BigInt(amountAWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
+    const amountBMin = 0;BigInt(amountBWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
 
     // 添加流动性
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20分钟后过期
@@ -216,7 +216,6 @@ export async function addInitialLiquidity(
 
     return addLiquidityTx;
   } catch (error) {
-    console.error('添加流动性失败:', error);
     // 提供更详细的错误信息
     if (error.message.includes('insufficient')) {
       throw new Error('代币余额不足');
@@ -260,7 +259,7 @@ export async function getPrice(
     // 从 Factory 获取交易对地址
     const pairAddress = await readContract({
       address: UNISWAP_V2_FACTORY as `0x${string}`,
-      abi: FACTORY_ABI,
+      abi: UNISWAP_V2_FACTORY_ABI,
       functionName: 'getPair',
       args: [tokenIn.address, tokenOut.address],
     });

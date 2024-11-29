@@ -9,6 +9,9 @@ import { TOKENS, addInitialLiquidity, createPair } from '@/services/uniswap';
 import { Token } from '@uniswap/sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { readContract } from '@wagmi/core';
+import { ERC20_ABI } from '@/constants/abis';
+import { formatUnits } from 'viem';
 
 export default function AddLiquidityPage() {
   const router = useRouter();
@@ -22,6 +25,8 @@ export default function AddLiquidityPage() {
   const [selectedTokenB, setSelectedTokenB] = useState<Token>(TOKENS.USDC);
   const [showTokenSelector, setShowTokenSelector] = useState<'A' | 'B' | null>(null);
   const [priceInfo, setPriceInfo] = useState<any>(null);
+  const [tokenABalance, setTokenABalance] = useState<string>('0');
+  const [tokenBBalance, setTokenBBalance] = useState<string>('0');
 
   const handleAddLiquidity = async () => {
     if (!isConnected || !address || !tokenAAmount || !tokenBAmount) return;
@@ -47,7 +52,7 @@ export default function AddLiquidityPage() {
     } catch (error: any) {
       console.error('添加流动性失败:', error);
       // 这里可以添加错误提示
-      alert(error.message || '操作失败，请重试');
+      // alert(error.message || '操作失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -67,6 +72,35 @@ export default function AddLiquidityPage() {
     }
     setShowTokenSelector(null);
   };
+
+  const fetchBalances = async () => {
+    if (!address) return;
+
+    try {
+      const balanceA = await readContract({
+        address: selectedTokenA.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [address],
+      });
+
+      const balanceB = await readContract({
+        address: selectedTokenB.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [address],
+      });
+
+      setTokenABalance(formatUnits(balanceA, selectedTokenA.decimals));
+      setTokenBBalance(formatUnits(balanceB, selectedTokenB.decimals));
+    } catch (error) {
+      console.error('获取余额失败:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchBalances();
+  }, [address, selectedTokenA.address, selectedTokenB.address]);
 
   return (
     <div className="max-w-lg mx-auto mt-8 p-4">
@@ -95,7 +129,9 @@ export default function AddLiquidityPage() {
               <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
                 <div className="flex justify-between mb-2">
                   <label className="text-sm text-gray-500">第一个代币数量</label>
-                  <span className="text-sm text-gray-500">余额: 0.0</span>
+                  <span className="text-sm text-gray-500">
+                    余额: {Number(tokenABalance).toFixed(6)}
+                  </span>
                 </div>
                 <div className="flex items-center">
                   <input
@@ -123,7 +159,9 @@ export default function AddLiquidityPage() {
               <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
                 <div className="flex justify-between mb-2">
                   <label className="text-sm text-gray-500">第二个代币数量</label>
-                  <span className="text-sm text-gray-500">余额: 0.0</span>
+                  <span className="text-sm text-gray-500">
+                    余额: {Number(tokenBBalance).toFixed(6)}
+                  </span>
                 </div>
                 <div className="flex items-center">
                   <input
