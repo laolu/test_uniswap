@@ -23,7 +23,7 @@ export async function createPair(tokenA: Token, tokenB: Token) {
       args: [token0.address, token1.address],
     });
 
-    // 如果交易对已存在且不是零地址，则直接返回
+    // 如果交易对存在且不是零地址，则直接返回
     if (existingPair && existingPair !== '0x0000000000000000000000000000000000000000') {
       console.log('交易对已存在:', existingPair);
       return existingPair;
@@ -243,67 +243,96 @@ export async function getPrice(
   amountIn: string,
   publicClient: any
 ) {
+  if (!tokenIn || !tokenOut || !amountIn || !publicClient) {
+    console.log('Missing required parameters:', { tokenIn, tokenOut, amountIn, publicClient });
+    return null;
+  }
+
   try {
-    console.log('Getting price for:', {
-      tokenIn: tokenIn.address,
-      tokenOut: tokenOut.address,
-      amountIn,
-      chainId: tokenIn.chainId
-    });
-
-    // 从 Factory 获取交易对地址
-    const pairAddress = await readContract({
-      address: UNISWAP_V2_FACTORY as `0x${string}`,
-      abi: UNISWAP_V2_FACTORY_ABI,
-      functionName: 'getPair',
-      args: [tokenIn.address, tokenOut.address],
-    });
-
-    console.log('Pair address:', pairAddress);
-
-    if (!pairAddress || pairAddress === '0x0000000000000000000000000000000000000000') {
-      throw new Error('交易对不存在');
+    // 检查代币地址是否有效
+    if (!tokenIn.address || !tokenOut.address) {
+      console.log('Invalid token addresses:', {
+        tokenInAddress: tokenIn.address,
+        tokenOutAddress: tokenOut.address
+      });
+      return null;
     }
 
-    const provider = createProvider(publicClient);
-    const pair = await Fetcher.fetchPairData(tokenIn, tokenOut, provider);
-    console.log('Pair fetched:', pair);
+    console.log('Getting price for:', {
+      tokenIn: {
+        address: tokenIn.address,
+        symbol: tokenIn.symbol,
+        decimals: tokenIn.decimals
+      },
+      tokenOut: {
+        address: tokenOut.address,
+        symbol: tokenOut.symbol,
+        decimals: tokenOut.decimals
+      },
+      amountIn
+    });
 
-    const route = new Route([pair], tokenIn);
-    const amountInWei = parseUnits(amountIn, tokenIn.decimals).toString();
+    const amountInWei = parseUnits(amountIn, tokenIn.decimals);
+
+    // 使用路由合约的 getAmountsOut 函数获取输出金额
+    const amounts = await readContract({
+      address: UNISWAP_V2_ROUTER as `0x${string}`,
+      abi: UNISWAP_V2_ROUTER_ABI,
+      functionName: 'getAmountsOut',
+      args: [
+        amountInWei,
+        [tokenIn.address, tokenOut.address]
+      ],
+    }) as bigint[];
+
+    if (!amounts || amounts.length < 2) {
+      return {
+        executionPrice: '0',
+        nextMidPrice: '0',
+        priceImpact: '0',
+        amountOut: '0',
+        minimumAmountOut: '0',
+        error: '无法获取价格，可能需要先添加流动性'
+      };
+    }
+
+    const amountOutWei = amounts[1];
     
-    const trade = new Trade(
-      route,
-      new TokenAmount(tokenIn, amountInWei),
-      TradeType.EXACT_INPUT
-    );
+    // 计算价格和最小获得数量
+    const executionPrice = Number(amountOutWei) / Number(amountInWei);
+    const minimumAmountOut = amountOutWei * BigInt(995) / BigInt(1000); // 0.5% 滑点
 
     return {
-      executionPrice: trade.executionPrice.toSignificant(6),
-      nextMidPrice: trade.nextMidPrice.toSignificant(6),
-      priceImpact: trade.priceImpact.toSignificant(2),
-      amountOut: trade.outputAmount.toSignificant(6),
-      minimumAmountOut: trade.minimumAmountOut(new Percent('50', '10000')).toSignificant(6),
-      pairAddress,
+      executionPrice: executionPrice.toFixed(6),
+      nextMidPrice: executionPrice.toFixed(6),
+      priceImpact: '0.00', // Router 已经考虑了价格影响
+      amountOut: formatUnits(amountOutWei, tokenOut.decimals),
+      minimumAmountOut: formatUnits(minimumAmountOut, tokenOut.decimals),
     };
+
   } catch (error) {
     console.error('获取价格失败:', error);
     console.error('错误详情:', {
       tokenIn: {
-        address: tokenIn.address,
-        decimals: tokenIn.decimals,
-        symbol: tokenIn.symbol,
-        chainId: tokenIn.chainId
+        address: tokenIn?.address,
+        decimals: tokenIn?.decimals,
+        symbol: tokenIn?.symbol
       },
       tokenOut: {
-        address: tokenOut.address,
-        decimals: tokenOut.decimals,
-        symbol: tokenOut.symbol,
-        chainId: tokenOut.chainId
+        address: tokenOut?.address,
+        decimals: tokenOut?.decimals,
+        symbol: tokenOut?.symbol
       },
       amountIn
     });
-    return null;
+    return {
+      executionPrice: '0',
+      nextMidPrice: '0',
+      priceImpact: '0',
+      amountOut: '0',
+      minimumAmountOut: '0',
+      error: '获取价格失败，请稍后重试'
+    };
   }
 }
 
@@ -316,47 +345,92 @@ export async function executeSwap(
   account: string
 ) {
   try {
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const pair = await Fetcher.fetchPairData(tokenIn, tokenOut, provider);
-    const route = new Route([pair], tokenIn);
-    const amountInWei = parseUnits(amountIn, tokenIn.decimals).toString();
-    
-    const trade = new Trade(
-      route,
-      new TokenAmount(tokenIn, amountInWei),
-      TradeType.EXACT_INPUT
-    );
+    console.log('Executing swap:', {
+      tokenIn: tokenIn.symbol,
+      tokenOut: tokenOut.symbol,
+      amountIn,
+      slippageTolerance
+    });
+
+    const amountInWei = parseUnits(amountIn, tokenIn.decimals);
+
+    // 获取预期输出金额
+    const amounts = await readContract({
+      address: UNISWAP_V2_ROUTER as `0x${string}`,
+      abi: UNISWAP_V2_ROUTER_ABI,
+      functionName: 'getAmountsOut',
+      args: [
+        amountInWei,
+        [tokenIn.address, tokenOut.address]
+      ],
+    }) as bigint[];
+
+    if (!amounts || amounts.length < 2) {
+      throw new Error('无法计算输出金额');
+    }
 
     // 计算最小获得数量（考虑滑点）
-    const slippagePercent = new Percent(Math.floor(slippageTolerance * 100).toString(), '10000');
-    const minAmountOut = trade.minimumAmountOut(slippagePercent).raw.toString();
+    const minAmountOut = amounts[1] * BigInt(1000 - Math.floor(slippageTolerance * 10)) / BigInt(1000);
 
-    // 批准代币使用
-    const approvalHash = await writeContract({
+    // 检查代币授权
+    const allowance = await readContract({
       address: tokenIn.address as `0x${string}`,
       abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [UNISWAP_V2_ROUTER, BigInt(amountInWei)],
-    });
+      functionName: 'allowance',
+      args: [account, UNISWAP_V2_ROUTER],
+    }) as bigint;
+
+    // 如果授权不足，先进行授权
+    if (allowance < amountInWei) {
+      console.log('Approving tokens...');
+      const approvalTx = await writeContract({
+        address: tokenIn.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [UNISWAP_V2_ROUTER, maxUint256],
+      });
+
+      // 等待授权交易确认
+      await waitForTransaction({
+        hash: approvalTx,
+        confirmations: 1,
+      });
+      console.log('Approval confirmed');
+    }
 
     // 执行交换
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20分钟后过期
-    const swapHash = await writeContract({
+    console.log('Executing swap transaction...');
+    const swapTx = await writeContract({
       address: UNISWAP_V2_ROUTER as `0x${string}`,
       abi: UNISWAP_V2_ROUTER_ABI,
       functionName: 'swapExactTokensForTokens',
       args: [
-        BigInt(amountInWei),
-        BigInt(minAmountOut),
+        amountInWei,
+        minAmountOut,
         [tokenIn.address, tokenOut.address],
         account,
         BigInt(deadline),
       ],
     });
 
-    return swapHash;
+    return swapTx;
   } catch (error) {
     console.error('交易执行失败:', error);
+    console.error('错误详情:', {
+      tokenIn: {
+        address: tokenIn.address,
+        symbol: tokenIn.symbol,
+        decimals: tokenIn.decimals
+      },
+      tokenOut: {
+        address: tokenOut.address,
+        symbol: tokenOut.symbol,
+        decimals: tokenOut.decimals
+      },
+      amountIn,
+      slippageTolerance
+    });
     throw error;
   }
 } 

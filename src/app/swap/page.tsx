@@ -165,7 +165,13 @@ export default function SwapPage() {
               </div>
             </div>
 
-            {priceInfo && (
+            {priceInfo && priceInfo.error ? (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
+                <span className="text-sm text-red-600 dark:text-red-400">
+                  {priceInfo.error}
+                </span>
+              </div>
+            ) : priceInfo && (
               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">价格影响</span>
