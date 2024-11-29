@@ -5,37 +5,13 @@ import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Token } from '@uniswap/sdk';
 import { SEPOLIA_CHAIN_ID } from '@/constants/chains';
+import { COMMON_TOKENS } from '@/constants/tokens';
 
 interface TokenSelectorProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (token: Token) => void;
 }
-
-// 使用 Uniswap SDK 的 Token 类
-const commonTokens: Token[] = [
-  new Token(
-    SEPOLIA_CHAIN_ID,
-    '0x03Ee6A170cE7CDBD3d6D7dB89b7683374f03A78F',
-    18,
-    'WETH',
-    'Wrapped Ether'
-  ),
-  new Token(
-    SEPOLIA_CHAIN_ID,
-    '0x22013aFa65EDc2f0E2eD49D1EEA19A663aEC860d',
-    18,
-    'USDC',
-    'USD Coin'
-  ),
-  new Token(
-    SEPOLIA_CHAIN_ID,
-    '0xc95FBeCcE5D0B354122D0258b2eB4Cb15604106C',
-    18,
-    'DAI',
-    'Dai Stablecoin'
-  ),
-];
 
 export default function TokenSelector({ isOpen, onClose, onSelect }: TokenSelectorProps) {
   return (
@@ -93,7 +69,7 @@ export default function TokenSelector({ isOpen, onClose, onSelect }: TokenSelect
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        {commonTokens.map((token) => (
+                        {COMMON_TOKENS.map((token) => (
                           <button
                             key={token.address}
                             className="w-full flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg"
