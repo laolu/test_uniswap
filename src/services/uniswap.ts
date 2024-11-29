@@ -165,16 +165,11 @@ export async function addInitialLiquidity(
       }
     }
 
-<<<<<<< HEAD
-    // 计算最小接受数量（考虑滑点）
-    const amountAMin = 0;//BigInt(amountAWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
-    const amountBMin = 0;BigInt(amountBWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
-
-    // 添加流动性
-=======
     // 4. 添加流动性
->>>>>>> 9617820a2ea516e12dbed38d32a49fdbc49cc6c7
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20分钟后过期
+
+    
+    // 计算最小接受数量（考虑滑点）
     const amountAMin = BigInt(0); // BigInt(amountAWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
     const amountBMin = BigInt(0); // BigInt(amountBWei) * BigInt(1000 - slippageTolerance * 10) / BigInt(1000);
 
@@ -209,15 +204,10 @@ export async function addInitialLiquidity(
     });
 
     return addLiquidityTx;
-<<<<<<< HEAD
-  } catch (error) {
-    // 提供更详细的错误信息
-=======
+
   } catch (error: any) {
     console.error('添加流动性详细错误:', error);
-    
     // 更友好的错误提示
->>>>>>> 9617820a2ea516e12dbed38d32a49fdbc49cc6c7
     if (error.message.includes('insufficient')) {
       throw new Error('代币余额不足');
     } else if (error.message.includes('EXPIRED')) {

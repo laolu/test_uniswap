@@ -9,13 +9,10 @@ import { addInitialLiquidity, createPair } from '@/services/uniswap';
 import { Token } from '@uniswap/sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-<<<<<<< HEAD
 import { readContract } from '@wagmi/core';
 import { ERC20_ABI } from '@/constants/abis';
 import { formatUnits } from 'viem';
-=======
 import { DAI, USDC ,USDT,WETH } from '@/constants/tokens';
->>>>>>> 9617820a2ea516e12dbed38d32a49fdbc49cc6c7
 
 export default function AddLiquidityPage() {
   const router = useRouter();
