@@ -5,8 +5,9 @@ import { ArrowDownIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenSelector from '@/components/TokenSelector';
-import { TOKENS, getPrice, executeSwap } from '@/services/uniswap';
+import { getPrice, executeSwap } from '@/services/uniswap';
 import { Token } from '@uniswap/sdk';
+import { DAI, USDC ,USDT,WETH } from '@/constants/tokens';
 
 export default function SwapPage() {
   const { isConnected, address } = useAccount();
@@ -15,8 +16,8 @@ export default function SwapPage() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [tokenInAmount, setTokenInAmount] = useState('');
-  const [selectedTokenIn, setSelectedTokenIn] = useState<Token>(TOKENS.WETH);
-  const [selectedTokenOut, setSelectedTokenOut] = useState<Token>(TOKENS.USDC);
+  const [selectedTokenIn, setSelectedTokenIn] = useState<Token>(DAI);
+  const [selectedTokenOut, setSelectedTokenOut] = useState<Token>(USDC);
   const [showTokenSelector, setShowTokenSelector] = useState<'in' | 'out' | null>(null);
   const [priceInfo, setPriceInfo] = useState<any>(null);
 

@@ -13,6 +13,8 @@ import { readContract } from '@wagmi/core';
 import { ERC20_ABI } from '@/constants/abis';
 import { formatUnits } from 'viem';
 import { DAI, USDC ,USDT,WETH } from '@/constants/tokens';
+import { UNISWAP_V2_FACTORY } from '@/services/uniswap';
+import { UNISWAP_V2_PAIR_ABI, UNISWAP_V2_FACTORY_ABI } from '@/constants/abis';
 
 export default function AddLiquidityPage() {
   const router = useRouter();
@@ -46,7 +48,7 @@ export default function AddLiquidityPage() {
         tokenBAmount,
         address
       );
-      console.log('添加流动性成功:', tx);
+      console.log('添加流动性成:', tx);
       
       // 重定向到池子页面
       router.push('/pool');
@@ -78,24 +80,50 @@ export default function AddLiquidityPage() {
     if (!address) return;
 
     try {
-      const balanceA = await readContract({
-        address: selectedTokenA.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [address],
-      });
+      // 获取交易对地址
+      const pairAddress = await readContract({
+        address: UNISWAP_V2_FACTORY as `0x${string}`,
+        abi: UNISWAP_V2_FACTORY_ABI,
+        functionName: 'getPair',
+        args: [selectedTokenA.address, selectedTokenB.address],
+      }).catch(() => null);
 
-      const balanceB = await readContract({
-        address: selectedTokenB.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [address],
-      });
+      // 如果交易对存在且地址有效，尝试获取池中余额
+      if (pairAddress && pairAddress !== '0x0000000000000000000000000000000000000000') {
+        try {
+          const [reserveA, reserveB] = await readContract({
+            address: pairAddress as `0x${string}`,
+            abi: UNISWAP_V2_PAIR_ABI.abi,
+            functionName: 'getReserves',
+          }) as [bigint, bigint, number];
 
-      setTokenABalance(formatUnits(balanceA, selectedTokenA.decimals));
-      setTokenBBalance(formatUnits(balanceB, selectedTokenB.decimals));
+          const token0Address = await readContract({
+            address: pairAddress as `0x${string}`,
+            abi: UNISWAP_V2_PAIR_ABI.abi,
+            functionName: 'token0',
+          }) as `0x${string}`;
+
+          const [poolBalanceA, poolBalanceB] = token0Address.toLowerCase() === selectedTokenA.address.toLowerCase()
+            ? [reserveA, reserveB]
+            : [reserveB, reserveA];
+
+          setTokenABalance(formatUnits(poolBalanceA, selectedTokenA.decimals));
+          setTokenBBalance(formatUnits(poolBalanceB, selectedTokenB.decimals));
+          return;
+        } catch (error) {
+          console.error('获取池中余额失败:', error);
+        }
+      }
+
+      // 如果交易对不存在或获取池中余额失败，显示余额为 0
+      setTokenABalance('0');
+      setTokenBBalance('0');
+
     } catch (error) {
       console.error('获取余额失败:', error);
+      // 发生错误时设置余额为 0
+      setTokenABalance('0');
+      setTokenBBalance('0');
     }
   };
 
@@ -131,7 +159,7 @@ export default function AddLiquidityPage() {
                 <div className="flex justify-between mb-2">
                   <label className="text-sm text-gray-500">第一个代币数量</label>
                   <span className="text-sm text-gray-500">
-                    余额: {Number(tokenABalance).toFixed(6)}
+                    池中余额: {Number(tokenABalance).toFixed(6)}
                   </span>
                 </div>
                 <div className="flex items-center">
@@ -161,7 +189,7 @@ export default function AddLiquidityPage() {
                 <div className="flex justify-between mb-2">
                   <label className="text-sm text-gray-500">第二个代币数量</label>
                   <span className="text-sm text-gray-500">
-                    余额: {Number(tokenBBalance).toFixed(6)}
+                    池中余额: {Number(tokenBBalance).toFixed(6)}
                   </span>
                 </div>
                 <div className="flex items-center">
