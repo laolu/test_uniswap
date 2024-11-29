@@ -6,8 +6,7 @@ import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenSelector from '@/components/TokenSelector';
 import { getPrice, executeSwap } from '@/services/uniswap';
-import { Token } from '@uniswap/sdk';
-import { DAI, USDC ,USDT,WETH } from '@/constants/tokens';
+import {Token, DAI, USDC ,USDT,WETH } from '@/constants/tokens';
 
 export default function SwapPage() {
   const { isConnected, address } = useAccount();

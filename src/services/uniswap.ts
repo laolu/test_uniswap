@@ -1,9 +1,8 @@
-import { Token, Fetcher, Route, Trade, TokenAmount, TradeType, Percent } from '@uniswap/sdk';
-import { UNISWAP_V2_ROUTER_ABI, ERC20_ABI, UNISWAP_V2_FACTORY_ABI } from '@/constants/abis';
+import { UNISWAP_V2_ROUTER_ABI, ERC20_ABI, UNISWAP_V2_FACTORY_ABI,UNISWAP_V2_PAIR_ABI  } from '@/constants/abis';
 import { getContract, readContract, writeContract, waitForTransaction } from '@wagmi/core';
 import { parseUnits, formatUnits, maxUint256 } from 'viem';
-import { SEPOLIA_CHAIN_ID } from '@/constants/chains';
-import { ethers } from 'ethers';
+import { SupportedChainId } from '@/constants/chains';
+import {Token} from '@/constants/tokens';
 
 // Sepolia 测试网上的合约地址
 export const UNISWAP_V2_ROUTER = '0x3361623A4E323e0d3f170b8f39124A5CAccdC725';
@@ -13,7 +12,9 @@ export const UNISWAP_V2_FACTORY = '0x4603870b4e0825956842a823cDdDa35426b9Ca01';
 export async function createPair(tokenA: Token, tokenB: Token) {
   try {
     // 确保代币按地址排序
-    const [token0, token1] = tokenA.address < tokenB.address ? [tokenA, tokenB] : [tokenB, tokenA];
+    const [token0, token1] = tokenA.address.toLowerCase() < tokenB.address.toLowerCase() 
+      ? [tokenA, tokenB] 
+      : [tokenB, tokenA];
     
     // 先检查交易对是否已存在
     const existingPair = await readContract({
@@ -37,7 +38,12 @@ export async function createPair(tokenA: Token, tokenB: Token) {
       args: [token0.address, token1.address],
     });
 
-    return createPairTx;
+    const receipt = await waitForTransaction({
+      hash: createPairTx as `0x${string}`,
+      confirmations: 1,
+    });
+
+    return receipt.transactionHash;
   } catch (error) {
     console.error('创建交易对失败:', error);
     throw error;
@@ -249,28 +255,26 @@ export async function getPrice(
   }
 
   try {
-    // 检查代币地址是否有效
-    if (!tokenIn.address || !tokenOut.address) {
-      console.log('Invalid token addresses:', {
-        tokenInAddress: tokenIn.address,
-        tokenOutAddress: tokenOut.address
-      });
-      return null;
-    }
-
-    console.log('Getting price for:', {
-      tokenIn: {
-        address: tokenIn.address,
-        symbol: tokenIn.symbol,
-        decimals: tokenIn.decimals
-      },
-      tokenOut: {
-        address: tokenOut.address,
-        symbol: tokenOut.symbol,
-        decimals: tokenOut.decimals
-      },
-      amountIn
+    // 先检查交易对是否存在
+    const pairAddress = await readContract({
+      address: UNISWAP_V2_FACTORY as `0x${string}`,
+      abi: UNISWAP_V2_FACTORY_ABI,
+      functionName: 'getPair',
+      args: [tokenIn.address, tokenOut.address],
     });
+
+    console.log('Pair address:', pairAddress);
+
+    if (!pairAddress || pairAddress === '0x0000000000000000000000000000000000000000') {
+      return {
+        executionPrice: '0',
+        nextMidPrice: '0',
+        priceImpact: '0',
+        amountOut: '0',
+        minimumAmountOut: '0',
+        error: '交易对不存在，需要先添加流动性'
+      };
+    }
 
     const amountInWei = parseUnits(amountIn, tokenIn.decimals);
 
@@ -283,7 +287,10 @@ export async function getPrice(
         amountInWei,
         [tokenIn.address, tokenOut.address]
       ],
-    }) as bigint[];
+    }).catch(error => {
+      console.error('Router getAmountsOut error:', error);
+      return null;
+    }) as bigint[] | null;
 
     if (!amounts || amounts.length < 2) {
       return {
@@ -292,39 +299,27 @@ export async function getPrice(
         priceImpact: '0',
         amountOut: '0',
         minimumAmountOut: '0',
-        error: '无法获取价格，可能需要先添加流动性'
+        error: '交易对流动性不足，请先添加流动性'
       };
     }
 
     const amountOutWei = amounts[1];
     
     // 计算价格和最小获得数量
-    const executionPrice = Number(amountOutWei) / Number(amountInWei);
+    const executionPrice = Number(formatUnits(amountOutWei, tokenOut.decimals)) / 
+                         Number(formatUnits(amountInWei, tokenIn.decimals));
     const minimumAmountOut = amountOutWei * BigInt(995) / BigInt(1000); // 0.5% 滑点
 
     return {
       executionPrice: executionPrice.toFixed(6),
       nextMidPrice: executionPrice.toFixed(6),
-      priceImpact: '0.00', // Router 已经考虑了价格影响
+      priceImpact: '0.00',
       amountOut: formatUnits(amountOutWei, tokenOut.decimals),
       minimumAmountOut: formatUnits(minimumAmountOut, tokenOut.decimals),
     };
 
   } catch (error) {
     console.error('获取价格失败:', error);
-    console.error('错误详情:', {
-      tokenIn: {
-        address: tokenIn?.address,
-        decimals: tokenIn?.decimals,
-        symbol: tokenIn?.symbol
-      },
-      tokenOut: {
-        address: tokenOut?.address,
-        decimals: tokenOut?.decimals,
-        symbol: tokenOut?.symbol
-      },
-      amountIn
-    });
     return {
       executionPrice: '0',
       nextMidPrice: '0',
