@@ -6,31 +6,39 @@ export interface Token {
   symbol: string;
   name: string;
   decimals: number;
+  chainId: SupportedChainId;
 }
 
-export const COMMON_TOKENS: Token[] = [
-  {
-    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    symbol: 'WETH',
-    name: 'Wrapped Ether',
-    decimals: 18
-  },
-  {
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6
-  },
-  {
-    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    symbol: 'USDT',
-    name: 'Tether USD',
-    decimals: 6
-  },
-  {
-    address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-    symbol: 'DAI',
-    name: 'Dai Stablecoin',
-    decimals: 18
-  }
-] 
+export const WETH: Token = {
+  address: '0x86268F605DA130ea51E51cbD90215cE4f6e2A4C4',
+  symbol: 'WETH',
+  name: 'My WETH',
+  decimals: 18,
+  chainId: SupportedChainId.SEPOLIA,
+};
+
+export const USDC: Token = {
+  address: '0x9Bd1AF68Abbc63195aeEA1260d1F294e7e03E511',
+  symbol: 'USDC',
+  name: 'My USDC',
+  decimals: 18,
+  chainId: SupportedChainId.SEPOLIA,
+};
+
+export const DAI: Token = {
+  address: '0x6607b0CE0Ef51520b50B37FC1B732534CE8d24a4',
+  symbol: 'DAI',
+  name: 'My Dai',
+  decimals: 18,
+  chainId: SupportedChainId.SEPOLIA,
+};
+
+export const USDT: Token = {
+  address: '0x9d6C5b366BF6ea47523b34dc0A98056893f29876',
+  symbol: 'USDT',
+  name: 'My USDT',
+  decimals: 18,
+  chainId: SupportedChainId.SEPOLIA,
+};
+
+export const COMMON_TOKENS = [WETH, USDC, DAI,USDT]; 

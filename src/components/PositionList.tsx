@@ -8,68 +8,32 @@ import { GRAPH_URL } from '@/lib/constants'
 import Link from 'next/link'
 import { formatUnits } from 'viem'
 import { Plus } from 'lucide-react'
-
-interface Token {
-  id: string
-  symbol: string
-  decimals: number
-}
-
-interface Position {
-  id: string
-  pair: {
-    id: string
-    token0: Token
-    token1: Token
-    token0Price: string
-    token1Price: string
-  }
-  liquidityTokenBalance: string
-  createdAtTimestamp: string
-}
-
-interface PositionsData {
-  liquidityPositions: Position[]
-}
+import { useState, useEffect } from 'react'
+import { getPositions } from '@/services/uniswap'
+import type { Position } from '@/types/uniswap'
 
 export default function PositionList() {
   const { address, isConnected } = useAccount()
+  const [positions, setPositions] = useState<Position[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const { data, isLoading } = useQuery<PositionsData>({
-    queryKey: ['positions', address],
-    queryFn: async () => {
-      const query = gql`
-        query getPositions($user: String!) {
-          liquidityPositions(
-            where: { user: $user, liquidityTokenBalance_gt: "0" }
-            orderBy: createdAtTimestamp
-            orderDirection: desc
-          ) {
-            id
-            pair {
-              id
-              token0 {
-                id
-                symbol
-                decimals
-              }
-              token1 {
-                id
-                symbol
-                decimals
-              }
-              token0Price
-              token1Price
-            }
-            liquidityTokenBalance
-            createdAtTimestamp
-          }
-        }
-      `
-      return request(GRAPH_URL, query, { user: address?.toLowerCase() })
-    },
-    enabled: !!address
-  })
+  useEffect(() => {
+    async function fetchPositions() {
+      if (!address) return
+      
+      setLoading(true)
+      try {
+        const data = await getPositions(address)
+        setPositions(data)
+      } catch (error) {
+        console.error('获取位置错误:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPositions()
+  }, [address])
 
   if (!isConnected) {
     return (
@@ -81,7 +45,7 @@ export default function PositionList() {
     )
   }
 
-  if (isLoading) {
+  if (loading) {
     return <div>加载中...</div>
   }
 
@@ -103,7 +67,7 @@ export default function PositionList() {
       </div>
 
       <div className="space-y-4">
-        {!data?.liquidityPositions.length ? (
+        {!positions.length ? (
           <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow">
             <h2 className="text-xl font-semibold mb-4">暂无头寸</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
@@ -111,7 +75,7 @@ export default function PositionList() {
             </p>
           </div>
         ) : (
-          data.liquidityPositions.map((position) => (
+          positions.map((position) => (
             <div
               key={position.id}
               className="bg-white dark:bg-gray-800 rounded-2xl shadow p-6"

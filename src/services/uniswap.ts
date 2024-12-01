@@ -3,6 +3,8 @@ import { getContract, readContract, writeContract, waitForTransaction } from '@w
 import { parseUnits, formatUnits, maxUint256 } from 'viem';
 import { SupportedChainId } from '@/constants/chains';
 import {Token} from '@/constants/tokens';
+import { fetchPositions } from './uniswapQueries'
+import type { Position } from '@/types/uniswap'
 
 // Sepolia 测试网上的合约地址
 export const UNISWAP_V2_ROUTER = '0x3361623A4E323e0d3f170b8f39124A5CAccdC725';
@@ -428,4 +430,8 @@ export async function executeSwap(
     });
     throw error;
   }
+} 
+
+export async function getPositions(address: string): Promise<Position[]> {
+  return fetchPositions(address)
 } 

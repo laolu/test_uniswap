@@ -1,34 +1,92 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAccount, useContractWrite, usePrepareContractWrite } from 'wagmi'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAccount, useContractWrite, usePrepareContractWrite, useContractRead } from 'wagmi'
 import { ArrowDown, ArrowUpDown, ArrowLeft } from 'lucide-react'
 import TokenSelector from './TokenSelector'
-import { parseUnits } from 'viem'
-import { ROUTER_ADDRESS } from '@/constants/addresses'
-import { ROUTER_ABI, ERC20_ABI } from '@/constants/abis'
-import { gql, request } from 'graphql-request'
 import { useRouter } from 'next/navigation'
+import { addInitialLiquidity } from '@/services/uniswap'
+import { Token } from '@/constants/tokens'
+import { ERC20_ABI } from '@/constants/abis'
+import { formatUnits } from 'viem'
 
-interface Token {
-  address: string
-  symbol: string
-  decimals: number
+interface ExtendedToken extends Token {
   balance?: string
+}
+
+// 添加格式化余额的辅助函数
+const formatBalance = (balance: string) => {
+  const num = parseFloat(balance)
+  if (num > 1000000) {
+    return `${(num / 1000000).toFixed(2)}M`
+  } else if (num > 1000) {
+    return `${(num / 1000).toFixed(2)}K`
+  }
+  return num.toFixed(4)
 }
 
 export default function AddLiquidity() {
   const { address, isConnected } = useAccount()
   const [token0Amount, setToken0Amount] = useState('')
   const [token1Amount, setToken1Amount] = useState('')
-  const [token0, setToken0] = useState<Token | null>(null)
-  const [token1, setToken1] = useState<Token | null>(null)
+  const [token0, setToken0] = useState<ExtendedToken | null>(null)
+  const [token1, setToken1] = useState<ExtendedToken | null>(null)
   const [isToken0SelectorOpen, setIsToken0SelectorOpen] = useState(false)
   const [isToken1SelectorOpen, setIsToken1SelectorOpen] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
+
+  const { data: token0Balance } = useContractRead({
+    address: token0?.address as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address as `0x${string}`] : undefined,
+    enabled: !!token0?.address && !!address,
+    watch: true,
+  })
+
+  const { data: token1Balance } = useContractRead({
+    address: token1?.address as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address as `0x${string}`] : undefined,
+    enabled: !!token1?.address && !!address,
+    watch: true,
+  })
+
+  useEffect(() => {
+    if (token0 && token0Balance && token0.balance === undefined) {
+      try {
+        const formattedBalance = formatUnits(token0Balance as bigint, token0.decimals)
+        setToken0(prev => {
+          if (prev?.balance === formattedBalance) return prev
+          return {
+            ...prev!,
+            balance: formattedBalance
+          }
+        })
+      } catch (error) {
+        console.error('格式化 token0 余额错误:', error)
+      }
+    }
+  }, [token0Balance, token0?.address])
+
+  useEffect(() => {
+    if (token1 && token1Balance && token1.balance === undefined) {
+      try {
+        const formattedBalance = formatUnits(token1Balance as bigint, token1.decimals)
+        setToken1(prev => {
+          if (prev?.balance === formattedBalance) return prev
+          return {
+            ...prev!,
+            balance: formattedBalance
+          }
+        })
+      } catch (error) {
+        console.error('格式化 token1 余额错误:', error)
+      }
+    }
+  }, [token1Balance, token1?.address])
 
   const handleSwapTokens = () => {
     const tempToken = token0
@@ -40,66 +98,48 @@ export default function AddLiquidity() {
     setToken1Amount(tempAmount)
   }
 
-  const { config: approveToken0Config } = usePrepareContractWrite({
-    address: token0?.address as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: 'approve',
-    enabled: !!token0 && !!token0Amount,
-    args: [
-      ROUTER_ADDRESS,
-      parseUnits(token0Amount || '0', token0?.decimals || 18)
-    ],
-  })
-
-  const { config: approveToken1Config } = usePrepareContractWrite({
-    address: token1?.address as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: 'approve',
-    enabled: !!token1 && !!token1Amount,
-    args: [
-      ROUTER_ADDRESS,
-      parseUnits(token1Amount || '0', token1?.decimals || 18)
-    ],
-  })
-
-  const { write: approveToken0 } = useContractWrite(approveToken0Config)
-  const { write: approveToken1 } = useContractWrite(approveToken1Config)
-
-  const { config } = usePrepareContractWrite({
-    address: ROUTER_ADDRESS,
-    abi: ROUTER_ABI,
-    functionName: 'addLiquidity',
-    enabled: !!(token0 && token1 && token0Amount && token1Amount && address),
-    args: token0 && token1 && token0Amount && token1Amount ? [
-      token0.address as `0x${string}`,
-      token1.address as `0x${string}`,
-      parseUnits(token0Amount, token0.decimals),
-      parseUnits(token1Amount, token1.decimals),
-      0n, // minAmount0
-      0n, // minAmount1
-      address,
-      BigInt(Math.floor(Date.now() / 1000) + 1200) // deadline: 20 minutes
-    ] : undefined,
-  })
-
-  const { write: addLiquidity } = useContractWrite(config)
-
   const handleSubmit = async () => {
-    if (!token0 || !token1 || !token0Amount || !token1Amount) return
+    if (!token0?.address || !token1?.address || !token0Amount || !token1Amount || !address) {
+      console.log('Missing required parameters:', { 
+        token0Address: token0?.address, 
+        token1Address: token1?.address, 
+        token0Amount, 
+        token1Amount, 
+        address 
+      })
+      return
+    }
+
+    if (!token0.balance || !token1.balance) {
+      console.error('无法读取代币余额')
+      return
+    }
+
+    const token0BalanceNum = parseFloat(token0.balance)
+    const token1BalanceNum = parseFloat(token1.balance)
+    const token0AmountNum = parseFloat(token0Amount)
+    const token1AmountNum = parseFloat(token1Amount)
+
+    if (token0AmountNum > token0BalanceNum || token1AmountNum > token1BalanceNum) {
+      console.error('余额不足')
+      return
+    }
     
     try {
       setIsSubmitting(true)
       
-      setIsApproving(true)
-      await Promise.all([
-        approveToken0?.(),
-        approveToken1?.()
-      ])
-      setIsApproving(false)
+      await addInitialLiquidity(
+        token0,
+        token1,
+        token0Amount,
+        token1Amount,
+        address
+      )
 
-      await addLiquidity?.()
+      router.push('/pools/positions')
+
     } catch (error) {
-      console.error('Add liquidity error:', error)
+      console.error('添加流动性详细错误:', error)
     } finally {
       setIsSubmitting(false)
     }
@@ -113,7 +153,7 @@ export default function AddLiquidity() {
       >
         <ArrowLeft className="h-5 w-5" />
         <span>返回</span>
-      </button>
+      </button> 
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-6">
         <div className="mb-6">
@@ -123,7 +163,7 @@ export default function AddLiquidity() {
           </p>
         </div>
 
-        {/* 第一个代币输入 */}
+        {/* 第一���代币输入 */}
         <div className="mb-4">
           <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
             <div className="flex justify-between mb-2">
@@ -132,7 +172,7 @@ export default function AddLiquidity() {
               </label>
               {token0 && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  余额: {token0.balance}
+                  余额: {formatBalance(token0.balance || '0')} {token0.symbol}
                 </span>
               )}
             </div>
@@ -181,7 +221,7 @@ export default function AddLiquidity() {
               </label>
               {token1 && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  余额: {token1.balance}
+                  余额: {formatBalance(token1.balance || '0')} {token1.symbol}
                 </span>
               )}
             </div>
@@ -237,17 +277,14 @@ export default function AddLiquidity() {
               !token1 || 
               !token0Amount || 
               !token1Amount || 
-              isSubmitting || 
-              isApproving
+              isSubmitting
             }
             className="w-full py-4 bg-blue-500 dark:bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="text-white">
-              {isApproving
-                ? '授权中...'
-                : isSubmitting
-                  ? '提交中...'
-                  : '添加流动性'
+              {isSubmitting
+                ? '提交中...'
+                : '添加流动性'
               }
             </span>
           </button>
