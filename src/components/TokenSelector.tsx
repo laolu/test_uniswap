@@ -1,19 +1,32 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import { Token } from '@uniswap/sdk';
-import { SEPOLIA_CHAIN_ID } from '@/constants/chains';
-import { COMMON_TOKENS } from '@/constants/tokens';
+import { Token, COMMON_TOKENS } from '@/constants/tokens';
 
 interface TokenSelectorProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (token: Token) => void;
+  selectedTokens?: string[];
 }
 
-export default function TokenSelector({ isOpen, onClose, onSelect }: TokenSelectorProps) {
+export default function TokenSelector({ 
+  isOpen, 
+  onClose, 
+  onSelect, 
+  selectedTokens = [] 
+}: TokenSelectorProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredTokens = COMMON_TOKENS.filter(token => 
+    !selectedTokens.includes(token.address) &&
+    (token.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     token.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     token.address.toLowerCase() === searchQuery.toLowerCase())
+  );
+
   return (
     <Transition.Root show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
@@ -63,31 +76,39 @@ export default function TokenSelector({ isOpen, onClose, onSelect }: TokenSelect
                         </div>
                         <input
                           type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
                           className="block w-full rounded-md border-0 py-3 pl-10 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600"
                           placeholder="搜索代币名称或地址"
                         />
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        {COMMON_TOKENS.map((token) => (
-                          <button
-                            key={token.address}
-                            className="w-full flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg"
-                            onClick={() => {
-                              onSelect(token);
-                              onClose();
-                            }}
-                          >
-                            <div className="flex flex-col items-start">
-                              <span className="font-medium text-gray-900 dark:text-white">
-                                {token.symbol}
-                              </span>
-                              <span className="text-sm text-gray-500">
-                                {token.name}
-                              </span>
-                            </div>
-                          </button>
-                        ))}
+                        {filteredTokens.length === 0 ? (
+                          <div className="text-center py-4 text-gray-500">
+                            未找到代币
+                          </div>
+                        ) : (
+                          filteredTokens.map((token) => (
+                            <button
+                              key={token.address}
+                              className="w-full flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg"
+                              onClick={() => {
+                                onSelect(token)
+                                onClose()
+                              }}
+                            >
+                              <div className="flex flex-col items-start">
+                                <span className="font-medium text-gray-900 dark:text-white">
+                                  {token.symbol}
+                                </span>
+                                <span className="text-sm text-gray-500">
+                                  {token.name}
+                                </span>
+                              </div>
+                            </button>
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>

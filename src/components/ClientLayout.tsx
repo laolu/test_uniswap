@@ -1,43 +1,43 @@
 'use client';
 
-import { ThemeProvider } from 'next-themes';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { WagmiConfig } from 'wagmi';
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { wagmiConfig, chains, queryClient } from '@/lib/wagmi';
-import { Navbar } from './Navbar';
-import { useEffect, useState } from 'react';
+import {
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
+import { WagmiConfig } from 'wagmi'
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
+import { ThemeProvider } from 'next-themes'
+import { chains, wagmiConfig, queryClient } from '@/lib/wagmi'
+import { useEffect, useState } from 'react'
+import Navbar from '@/components/Navbar'
 
 export default function ClientLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  // 避免服务器端渲染不匹配
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
+    setMounted(true)
+  }, [])
 
   return (
-    <ThemeProvider attribute="class">
-      <QueryClientProvider client={queryClient}>
-        <WagmiConfig config={wagmiConfig}>
-          <RainbowKitProvider chains={chains}>
-            <div className="antialiased bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <WagmiConfig config={wagmiConfig}>
+        <RainbowKitProvider chains={chains}>
+          <QueryClientProvider client={queryClient}>
+            <div className="min-h-screen bg-background">
               <Navbar />
-              <main className="container mx-auto px-4 pt-20">
-                {children}
-              </main>
+              {mounted ? (
+                <main className="container mx-auto px-4 py-8">
+                  {children}
+                </main>
+              ) : null}
             </div>
-          </RainbowKitProvider>
-        </WagmiConfig>
-      </QueryClientProvider>
+          </QueryClientProvider>
+        </RainbowKitProvider>
+      </WagmiConfig>
     </ThemeProvider>
-  );
+  )
 } 
