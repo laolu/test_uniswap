@@ -31,7 +31,7 @@ export default function TradeNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-1">
+    <nav className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-lg rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800/80 p-1.5">
       <div className="flex">
         {TRADE_ROUTES.map(({ path, label, icon }) => (
           <Link
@@ -42,8 +42,8 @@ export default function TradeNav() {
               transition-all duration-200
               ${
                 pathname === path
-                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  ? 'bg-pink-500/10 dark:bg-pink-500/20 text-pink-500 dark:text-pink-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80'
               }
             `}
           >

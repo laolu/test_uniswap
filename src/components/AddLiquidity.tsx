@@ -1,47 +1,109 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { useAccount, useContractWrite, usePrepareContractWrite, useContractRead } from 'wagmi'
-import { ArrowDown, ArrowUpDown, ArrowLeft } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useAccount,useContractRead } from 'wagmi'
+import { ArrowUpDown, ArrowLeft } from 'lucide-react'
 import TokenSelector from './TokenSelector'
 import { useRouter } from 'next/navigation'
 import { addInitialLiquidity } from '@/services/uniswap'
-import { Token } from '@/constants/tokens'
+import { Token, DAI, USDT } from '@/constants/tokens'
 import { ERC20_ABI } from '@/constants/abis'
-import { formatUnits } from 'viem'
+import { formatUnits, parseUnits } from 'viem'
+import { readContract } from '@wagmi/core'
+import Image from 'next/image'
+import { UNISWAP_V2_FACTORY, UNISWAP_V2_FACTORY_ABI, UNISWAP_V2_PAIR_ABI, UNISWAP_V2_ROUTER, UNISWAP_V2_ROUTER_ABI } from '@/constants/contracts'
 
 interface ExtendedToken extends Token {
   balance?: string
 }
 
-// 添加格式化余额的辅助函数
-const formatBalance = (balance: string) => {
-  const num = parseFloat(balance)
-  if (num > 1000000) {
-    return `${(num / 1000000).toFixed(2)}M`
-  } else if (num > 1000) {
-    return `${(num / 1000).toFixed(2)}K`
-  }
-  return num.toFixed(4)
+interface PoolInfo {
+  reserve0: bigint
+  reserve1: bigint
+  totalSupply: bigint
+  myShare: bigint
+  poolShare: string
+  token0Price: string
+  token1Price: string
 }
+
+// 直接定义需要的 ABI
+const PAIR_ABI = [
+  {
+    "inputs": [],
+    "name": "getReserves",
+    "outputs": [
+      {
+        "internalType": "uint112",
+        "name": "_reserve0",
+        "type": "uint112"
+      },
+      {
+        "internalType": "uint112",
+        "name": "_reserve1",
+        "type": "uint112"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_blockTimestampLast",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalSupply",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
+    ],
+    "name": "balanceOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const;
 
 export default function AddLiquidity() {
   const { address, isConnected } = useAccount()
   const [token0Amount, setToken0Amount] = useState('')
   const [token1Amount, setToken1Amount] = useState('')
-  const [token0, setToken0] = useState<ExtendedToken | null>(null)
-  const [token1, setToken1] = useState<ExtendedToken | null>(null)
+  const [token0, setToken0] = useState<ExtendedToken>(USDT)
+  const [token1, setToken1] = useState<ExtendedToken>(DAI)
   const [isToken0SelectorOpen, setIsToken0SelectorOpen] = useState(false)
   const [isToken1SelectorOpen, setIsToken1SelectorOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
+  const [poolInfo, setPoolInfo] = useState<PoolInfo | null>(null)
 
   const { data: token0Balance } = useContractRead({
     address: token0?.address as `0x${string}`,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
-    args: address ? [address as `0x${string}`] : undefined,
-    enabled: !!token0?.address && !!address,
+    args: [address as `0x${string}`],
+    enabled: Boolean(token0?.address && address),
     watch: true,
   })
 
@@ -49,44 +111,10 @@ export default function AddLiquidity() {
     address: token1?.address as `0x${string}`,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
-    args: address ? [address as `0x${string}`] : undefined,
-    enabled: !!token1?.address && !!address,
+    args: [address as `0x${string}`],
+    enabled: Boolean(token1?.address && address),
     watch: true,
   })
-
-  useEffect(() => {
-    if (token0 && token0Balance && token0.balance === undefined) {
-      try {
-        const formattedBalance = formatUnits(token0Balance as bigint, token0.decimals)
-        setToken0(prev => {
-          if (prev?.balance === formattedBalance) return prev
-          return {
-            ...prev!,
-            balance: formattedBalance
-          }
-        })
-      } catch (error) {
-        console.error('格式化 token0 余额错误:', error)
-      }
-    }
-  }, [token0Balance, token0?.address])
-
-  useEffect(() => {
-    if (token1 && token1Balance && token1.balance === undefined) {
-      try {
-        const formattedBalance = formatUnits(token1Balance as bigint, token1.decimals)
-        setToken1(prev => {
-          if (prev?.balance === formattedBalance) return prev
-          return {
-            ...prev!,
-            balance: formattedBalance
-          }
-        })
-      } catch (error) {
-        console.error('格式化 token1 余额错误:', error)
-      }
-    }
-  }, [token1Balance, token1?.address])
 
   const handleSwapTokens = () => {
     const tempToken = token0
@@ -110,18 +138,19 @@ export default function AddLiquidity() {
       return
     }
 
-    if (!token0.balance || !token1.balance) {
-      console.error('无法读取代币余额')
-      return
-    }
-
-    const token0BalanceNum = parseFloat(token0.balance)
-    const token1BalanceNum = parseFloat(token1.balance)
+    // 检查余额
+    const token0BalanceNum = token0Balance ? Number(formatUnits(token0Balance as bigint, token0.decimals)) : 0
+    const token1BalanceNum = token1Balance ? Number(formatUnits(token1Balance as bigint, token1.decimals)) : 0
     const token0AmountNum = parseFloat(token0Amount)
     const token1AmountNum = parseFloat(token1Amount)
 
-    if (token0AmountNum > token0BalanceNum || token1AmountNum > token1BalanceNum) {
-      console.error('余额不足')
+    if (token0AmountNum > token0BalanceNum) {
+      console.error(`${token0.symbol} 余额不足`)
+      return
+    }
+
+    if (token1AmountNum > token1BalanceNum) {
+      console.error(`${token1.symbol} 余额不足`)
       return
     }
     
@@ -145,8 +174,104 @@ export default function AddLiquidity() {
     }
   }
 
+  // 获取池子信息
+  useEffect(() => {
+    async function fetchPoolInfo() {
+      // 如果没有选择代币，直接返回默认值
+      if (!token0 || !token1) {
+        setPoolInfo({
+          reserve0: BigInt(0),
+          reserve1: BigInt(0),
+          totalSupply: BigInt(0),
+          myShare: BigInt(0),
+          poolShare: '0.00',
+          token0Price: '0.00',
+          token1Price: '0.00',
+        })
+        return
+      }
+
+      try {
+        // 获取交易对地址
+        const pairAddress = await readContract({
+          address: UNISWAP_V2_FACTORY as `0x${string}`,
+          abi: UNISWAP_V2_FACTORY_ABI,
+          functionName: 'getPair',
+          args: [token0.address, token1.address],
+        }) as `0x${string}`
+
+        let poolShare = '0.00'
+        let totalSupply = BigInt(0)
+        let myShare = BigInt(0)
+        let reserve0 = BigInt(0)
+        let reserve1 = BigInt(0)
+
+        // 如果交易对存在，获取储备量和价格信息
+        if (pairAddress !== '0x0000000000000000000000000000000000000000') {
+          const reserves = await readContract({
+            address: pairAddress,
+            abi: PAIR_ABI,
+            functionName: 'getReserves',
+          }) as [bigint, bigint, number]
+
+          reserve0 = reserves[0]
+          reserve1 = reserves[1]
+
+          // 只有在输入金额时才计算份额
+          if (token0Amount && token1Amount && address) {
+            // 获取总供应量
+            totalSupply = await readContract({
+              address: pairAddress,
+              abi: PAIR_ABI,
+              functionName: 'totalSupply',
+            }) as bigint
+
+            // 获取用户LP代币余额
+            myShare = await readContract({
+              address: pairAddress,
+              abi: PAIR_ABI,
+              functionName: 'balanceOf',
+              args: [address],
+            }) as bigint
+
+            // 计算份额
+            if (totalSupply === BigInt(0)) {
+              poolShare = '100'
+            } else {
+              const amount0Wei = parseUnits(token0Amount, token0.decimals)
+              const amount1Wei = parseUnits(token1Amount, token1.decimals)
+              const liquidity = Math.min(
+                (Number(amount0Wei) * Number(totalSupply)) / Number(reserve0),
+                (Number(amount1Wei) * Number(totalSupply)) / Number(reserve1)
+              )
+              poolShare = ((liquidity / (Number(totalSupply) + liquidity)) * 100).toFixed(2)
+            }
+          }
+        } else if (token0Amount && token1Amount) {
+          // 如果池子不存在且用户输入了金额，则为首个流动性提供者
+          poolShare = '100'
+        }
+
+        setPoolInfo({
+          reserve0,
+          reserve1,
+          totalSupply,
+          myShare,
+          poolShare,
+          token0Price: reserve0 > 0 ? formatUnits(reserve1 * BigInt(10 ** token0.decimals) / reserve0, token1.decimals) : '0.00',
+          token1Price: reserve1 > 0 ? formatUnits(reserve0 * BigInt(10 ** token1.decimals) / reserve1, token0.decimals) : '0.00',
+        })
+      } catch (error) {
+        console.error('获取池子信息失败:', error)
+        setPoolInfo(null)
+      }
+    }
+
+    fetchPoolInfo()
+  }, [token0, token1, token0Amount, token1Amount, address])
+
   return (
-    <div className="w-full max-w-lg mx-auto">
+    <div className="w-full max-w-4xl mx-auto">
       <button
         onClick={() => router.back()}
         className="inline-flex items-center gap-2 mb-6 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
@@ -163,18 +288,13 @@ export default function AddLiquidity() {
           </p>
         </div>
 
-        {/* 第一���代币输入 */}
+        {/* 第一代币输入 */}
         <div className="mb-4">
           <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
-            <div className="flex justify-between mb-2">
+            <div className="mb-2">
               <label className="text-sm text-gray-500 dark:text-gray-400">
                 输入
               </label>
-              {token0 && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  余额: {formatBalance(token0.balance || '0')} {token0.symbol}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-4">
               <input
@@ -189,41 +309,62 @@ export default function AddLiquidity() {
               />
               <button
                 onClick={() => setIsToken0SelectorOpen(true)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                {token0 ? token0.symbol : '选择代币'}
+                {token0 && token0.icon && (
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image
+                      src={token0.icon}
+                      alt={token0.symbol}
+                      width={20}
+                      height={20}
+                    />
+                  </div>
+                )}
+                <span>{token0 ? token0.symbol : '选择代币'}</span>
               </button>
+            </div>
+            <div className="mt-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                余额: {token0Balance ? Number(formatUnits(token0Balance as bigint, token0?.decimals || 18)).toFixed(6) : '0'}
+              </span>
             </div>
           </div>
         </div>
 
         {/* 交换按钮 */}
-        <div className="flex justify-center -my-2 relative z-10">
-          <button
-            onClick={handleSwapTokens}
-            disabled={!token0 || !token1}
-            className={`bg-gray-100 dark:bg-gray-900 p-2 rounded-xl transition-colors ${
-              token0 && token1 
-                ? 'hover:bg-gray-200 dark:hover:bg-gray-700' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <ArrowUpDown className="h-6 w-6" />
-          </button>
+        <div className="flex justify-center h-0">
+          <div className="relative -top-3">
+            <button
+              onClick={handleSwapTokens}
+              disabled={!token0 || !token1}
+              className={`
+                flex items-center justify-center
+                w-10 h-10
+                bg-white dark:bg-gray-800 
+                border border-gray-200 dark:border-gray-700
+                rounded-xl
+                shadow-sm
+                transition-all
+                ${
+                  token0 && token1 
+                    ? 'hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600' 
+                    : 'opacity-50 cursor-not-allowed'
+                }
+              `}
+            >
+              <ArrowUpDown className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+            </button>
+          </div>
         </div>
 
         {/* 第二个代币输入 */}
-        <div className="mb-6">
+        <div className="mt-8 mb-6">
           <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
-            <div className="flex justify-between mb-2">
+            <div className="mb-2">
               <label className="text-sm text-gray-500 dark:text-gray-400">
                 输入
               </label>
-              {token1 && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  余额: {formatBalance(token1.balance || '0')} {token1.symbol}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-4">
               <input
@@ -238,35 +379,73 @@ export default function AddLiquidity() {
               />
               <button
                 onClick={() => setIsToken1SelectorOpen(true)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                {token1 ? token1.symbol : '选择代币'}
+                {token1 && token1.icon && (
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image
+                      src={token1.icon}
+                      alt={token1.symbol}
+                      width={20}
+                      height={20}
+                    />
+                  </div>
+                )}
+                <span>{token1 ? token1.symbol : '选择代币'}</span>
               </button>
+            </div>
+            <div className="mt-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                余额: {token1Balance ? Number(formatUnits(token1Balance as bigint, token1?.decimals || 18)).toFixed(6) : '0'}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* 价格和流动性信息 */}
-        {token0 && token1 && (
-          <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 mb-6">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                价格
-              </span>
-              <span>
-                1 {token0.symbol} = {/* 计算价格 */} {token1.symbol}
-              </span>
+        {/* 价格和池子份额信息 */}
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 mb-6">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+            价格和池子份额
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {token0?.symbol} 价格
+                </span>
+                <span className="text-sm font-medium">
+                  1 {token0?.symbol} = {poolInfo?.token0Price || '0.00'} {token1?.symbol}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {token1?.symbol} 价格
+                </span>
+                <span className="text-sm font-medium">
+                  1 {token1?.symbol} = {poolInfo?.token1Price || '0.00'} {token0?.symbol}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                份额
-              </span>
-              <span>
-                {/* 计算份额百分比 */}0.00%
-              </span>
+
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  份额
+                </span>
+                <span className="text-lg font-medium text-pink-500 dark:text-pink-400">
+                  {poolInfo?.poolShare || '0.00'}%
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                {!poolInfo ? '请输入添加的代币数量' :
+                  poolInfo.poolShare === '100' 
+                    ? '您将是第一个流动性提供者'
+                    : '您的份额占池子总流动性的百分比'
+                }
+              </p>
             </div>
           </div>
-        )}
+        </div>
 
         {/* 提交按钮组 */}
         <div className="space-y-3">
@@ -297,21 +476,21 @@ export default function AddLiquidity() {
             </div>
           )}
         </div>
-
-        {/* 代币选择器 */}
-        <TokenSelector
-          isOpen={isToken0SelectorOpen}
-          onClose={() => setIsToken0SelectorOpen(false)}
-          onSelect={setToken0}
-          selectedTokens={token1 ? [token1.address] : []}
-        />
-        <TokenSelector
-          isOpen={isToken1SelectorOpen}
-          onClose={() => setIsToken1SelectorOpen(false)}
-          onSelect={setToken1}
-          selectedTokens={token0 ? [token0.address] : []}
-        />
       </div>
+
+      {/* 代币选择器 */}
+      <TokenSelector
+        isOpen={isToken0SelectorOpen}
+        onClose={() => setIsToken0SelectorOpen(false)}
+        onSelect={setToken0}
+        selectedTokens={token1 ? [token1.address] : []}
+      />
+      <TokenSelector
+        isOpen={isToken1SelectorOpen}
+        onClose={() => setIsToken1SelectorOpen(false)}
+        onSelect={setToken1}
+        selectedTokens={token0 ? [token0.address] : []}
+      />
     </div>
   )
 } 

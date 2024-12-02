@@ -6,11 +6,12 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import TokenSelector from './TokenSelector'
-import { Token } from '@/constants/tokens'
+import { Token, WETH } from '@/constants/tokens'
 import { formatUnits, parseUnits } from 'viem'
 import { useContractRead, useContractWrite, usePrepareContractWrite } from 'wagmi'
 import { ERC20_ABI } from '@/constants/abis'
 import { isAddress } from 'viem'
+import Image from 'next/image'
 
 interface ExtendedToken extends Token {
   balance?: string
@@ -29,7 +30,7 @@ const formatBalance = (balance: string) => {
 export default function Send() {
   const { address, isConnected } = useAccount()
   const router = useRouter()
-  const [token, setToken] = useState<ExtendedToken | null>(null)
+  const [token, setToken] = useState<ExtendedToken | null>(WETH)
   const [amount, setAmount] = useState('')
   const [recipient, setRecipient] = useState('')
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false)
@@ -153,9 +154,19 @@ export default function Send() {
               />
               <button
                 onClick={() => setIsTokenSelectorOpen(true)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                {token ? token.symbol : '选择代币'}
+                {token && token.icon && (
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image
+                      src={token.icon}
+                      alt={token.symbol}
+                      width={20}
+                      height={20}
+                    />
+                  </div>
+                )}
+                <span>{token ? token.symbol : '选择代币'}</span>
               </button>
             </div>
           </div>

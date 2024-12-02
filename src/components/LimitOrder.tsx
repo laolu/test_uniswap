@@ -6,10 +6,11 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { ArrowDown, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import TokenSelector from './TokenSelector'
-import { Token } from '@/constants/tokens'
+import { Token, WETH, USDC } from '@/constants/tokens'
 import { formatUnits } from 'viem'
 import { useContractRead } from 'wagmi'
 import { ERC20_ABI } from '@/constants/abis'
+import Image from 'next/image'
 
 interface ExtendedToken extends Token {
   balance?: string
@@ -28,8 +29,8 @@ const formatBalance = (balance: string) => {
 export default function LimitOrder() {
   const { address, isConnected } = useAccount()
   const router = useRouter()
-  const [tokenIn, setTokenIn] = useState<ExtendedToken | null>(null)
-  const [tokenOut, setTokenOut] = useState<ExtendedToken | null>(null)
+  const [tokenIn, setTokenIn] = useState<ExtendedToken | null>(WETH)
+  const [tokenOut, setTokenOut] = useState<ExtendedToken | null>(USDC)
   const [amountIn, setAmountIn] = useState('')
   const [limitPrice, setLimitPrice] = useState('')
   const [isTokenInSelectorOpen, setIsTokenInSelectorOpen] = useState(false)
@@ -121,9 +122,19 @@ export default function LimitOrder() {
               />
               <button
                 onClick={() => setIsTokenInSelectorOpen(true)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                {tokenIn ? tokenIn.symbol : '选择代币'}
+                {tokenIn && tokenIn.icon && (
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image
+                      src={tokenIn.icon}
+                      alt={tokenIn.symbol}
+                      width={20}
+                      height={20}
+                    />
+                  </div>
+                )}
+                <span>{tokenIn ? tokenIn.symbol : '选择代币'}</span>
               </button>
             </div>
           </div>
@@ -180,9 +191,19 @@ export default function LimitOrder() {
               />
               <button
                 onClick={() => setIsTokenOutSelectorOpen(true)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                {tokenOut ? tokenOut.symbol : '选择代币'}
+                {tokenOut && tokenOut.icon && (
+                  <div className="w-5 h-5 rounded-full overflow-hidden">
+                    <Image
+                      src={tokenOut.icon}
+                      alt={tokenOut.symbol}
+                      width={20}
+                      height={20}
+                    />
+                  </div>
+                )}
+                <span>{tokenOut ? tokenOut.symbol : '选择代币'}</span>
               </button>
             </div>
           </div>

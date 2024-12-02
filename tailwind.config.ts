@@ -1,18 +1,41 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss'
+import colors from 'tailwindcss/colors'
 
-export default {
+const config: Config = {
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    './src/**/*.{js,ts,jsx,tsx}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        // Uniswap 风格的颜色
+        pink: {
+          400: '#FF49DB',
+          500: '#FF007A',
+        },
+        slate: {
+          ...colors.slate,
+          900: '#0D111C',
+          800: '#131A2A',
+          700: '#1B2236',
+        },
+      },
+      backgroundColor: {
+        'primary': '#FF007A',
+        'primary-dark': '#FF49DB',
+      },
+      textColor: {
+        'primary': '#FF007A',
+        'primary-dark': '#FF49DB',
+      },
+      borderColor: {
+        'primary': '#FF007A',
+        'primary-dark': '#FF49DB',
       },
     },
   },
   plugins: [],
-} satisfies Config;
+}
+
+export default config
